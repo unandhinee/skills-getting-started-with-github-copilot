@@ -4,6 +4,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // helper: escape HTML to avoid XSS
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (s) => {
+      const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+      return map[s];
+    });
+  }
+
+  // helper: derive initials from an email or name
+  function initialsFrom(identifier) {
+    const name = String(identifier).split("@")[0];
+    const parts = name.split(/[\._\- ]+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -13,6 +29,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Reset activity select (keep default placeholder)
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,11 +39,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // build participants HTML
+        const participants = Array.isArray(details.participants) ? details.participants : [];
+        let participantsHtml = '<div class="participants"><strong>Participants:</strong>';
+        if (participants.length === 0) {
+          participantsHtml += '<p class="info">No participants yet.</p>';
+        } else {
+          participantsHtml += "<ul>";
+          participants.forEach((p) => {
+            participantsHtml += `<li><span class="participant-badge">${escapeHtml(initialsFrom(p))}</span>${escapeHtml(p)}</li>`;
+          });
+          participantsHtml += "</ul>";
+        }
+        participantsHtml += "</div>";
+
         activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(details.description)}</p>
+          <p><strong>Schedule:</strong> ${escapeHtml(details.schedule)}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHtml}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -62,6 +96,9 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+
+        // refresh activities to show updated participants
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
